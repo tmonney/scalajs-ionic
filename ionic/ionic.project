@@ -1,0 +1,9 @@
+{
+  "name": "ionic",
+  "app_id": "",
+  "documentRoot": "target/web/public/main",
+  "watchPatterns": [
+  	"target/web/public/main/**/*",
+  	"!target/web/public/main/lib/**/*"
+  ]
+}
