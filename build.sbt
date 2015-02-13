@@ -16,12 +16,15 @@ lazy val ionic = project.in(file("ionic"))
 		libraryDependencies ++= Seq(
 			"org.webjars" % "ionic" % "1.0.0-beta.14"
 		),
-		copyScalaJS := { mappings: Seq[(File, String)] =>
+		copyScalaJS := { mappings =>
 			val targetDir = (target in Assets).value / "scalajs"
-			val in: File = (fastOptJS in Compile in scalajs).value.data
-			val out: File = targetDir / in.name
-			IO.copyFile(in, out)
-			mappings :+ ((in, s"js/${in.name}"))
+			val jsIn = (fastOptJS in Compile in scalajs).value.data
+			val jsMapIn = file(jsIn.absolutePath + ".map")
+			val jsOut = targetDir / jsIn.name
+			val jsMapOut = targetDir / jsMapIn.name
+			IO.copyFile(jsIn, jsOut)
+			IO.copyFile(jsMapIn, jsMapOut)
+			mappings ++ Seq(jsIn -> s"js/${jsOut.name}", jsOut -> s"js/${jsMapOut.name}")
 		},
 		pipelineStages in Assets := Seq(copyScalaJS),
 		pipelineStages := Seq(copyScalaJS)
