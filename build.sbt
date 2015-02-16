@@ -31,3 +31,18 @@ lazy val ionic = project.in(file("ionic"))
 	)
 
 val copyScalaJS = taskKey[Pipeline.Stage]("Copy ScalaJS output")
+
+val start = taskKey[Unit]("Start serving the Ionic application")
+val stop = taskKey[Unit]("Stop the served Ionic application")
+val pidFile = settingKey[File]("A file containing the PID of the last Ionic process")
+pidFile := target.value / "ionic.pid"
+start := {
+	Process("ionic" :: "serve" :: "--serverlogs" :: "--consolelogs" :: Nil, ionic.base).run()
+	"pgrep node -n" #> pidFile.value !
+}
+stop := {
+	val pid = IO.read(pidFile.value)
+	s"kill $pid" !;
+	IO.delete(pidFile.value)
+}
+
