@@ -1,48 +1,64 @@
+import scala.language.postfixOps
+
 import sbt._
 import Keys._
 
-import com.typesafe.sbt.web.pipeline.Pipeline
+import com.typesafe.sbt.web.SbtWeb
 import com.typesafe.sbt.web.Import._
 import WebKeys._
 
-object Ionic {
+object IonicPlugin extends AutoPlugin {
 
-  val scalaJsFiles = taskKey[Seq[File]]("Gather Scala.js files to process")
+  override def requires = SbtWeb
 
-  val copyScalaJs = taskKey[Pipeline.Stage]("Copy Scala.js output")
+  object autoImport {
+    val ionicJsFiles = taskKey[Seq[File]]("Gather JS files to process")
+    val ionicStart = taskKey[Unit]("Start serving the Ionic application")
+    val ionicStop = taskKey[Unit]("Stop the currently serving Ionic application")
+  }
 
-  val ionicStart = taskKey[Unit]("Start serving the Ionic application")
-
-  val ionicStop = taskKey[Unit]("Stop the currently serving Ionic application")
+  import autoImport._
+  import com.typesafe.sbt.web.pipeline.Pipeline
 
   val ionicPidFile = settingKey[File]("A file containing the PID of the last Ionic process")
+  val copyJsFiles = taskKey[Pipeline.Stage]("Copy JS files")
 
-  ionicPidFile := target.value / "ionic.pid"
+  override lazy val projectSettings = Seq(
+    copyJsFiles := { mappings =>
+      val targetDir = webTarget.value / "ionic-js"
+      val jsIn = ionicJsFiles.value
+      val jsMapIn = jsIn map (js => file(js.absolutePath + ".map"))
+      val out = copyFiles(jsIn ++ jsMapIn, targetDir)
+      val targets = out map (f => s"js/${f.name}")
+      mappings ++ (out zip targets)
+    },
 
-  copyScalaJs := { mappings =>
-    val targetDir = webTarget.value / "scalajs"
-    val jsIn = scalaJsFiles.value
-    val jsOut = jsIn map (targetDir / _.name)
-    val jsTargets = jsOut map (f => s"js/${f.name}")
-    IO.copy(jsIn zip jsOut)
+    pipelineStages in Assets := Seq(copyJsFiles),
+    pipelineStages := Seq(copyJsFiles),
 
+    ionicPidFile := target.value / "ionic.pid",
 
-    val jsMapIn = jsIn map (js => file(js.absolutePath + ".map"))
-    val jsMapOut = jsMapIn map (targetDir / _.name)
-    val jsMapTargets = jsMapOut map (f => s"js/${f.name}")
-    IO.copy(jsMapIn zip jsMapOut)
+    ionicStart := {
+      // TODO allow the user to configure flags
+      Process("ionic" :: "serve" :: "--lab" :: "--serverlogs" :: "--consolelogs" :: Nil, baseDirectory.value).run()
+      "pgrep node -n" #> ionicPidFile.value !
+    },
 
-    mappings ++ (jsOut zip jsTargets) ++ (jsMapOut zip jsMapTargets)
-  }
+    // make sure the assets are processed before starting the server
+    ionicStart <<= ionicStart.dependsOn(copyJsFiles),
 
-  ionicStart := {
-  	Process("ionic" :: "serve" :: "--serverlogs" :: "--consolelogs" :: Nil, baseDirectory.value).run()
-    "pgrep node -n" #> ionicPidFile.value !
-  }
+    ionicStop := {
+      // TODO handle the case when the PID file does not exist
+      val pid = IO.read(ionicPidFile.value)
+      s"kill $pid".!
+      IO.delete(ionicPidFile.value)
+    }
+  )
 
-  ionicStop := {
-    val pid = IO.read(ionicPidFile.value)
-    s"kill $pid".!
-    IO.delete(ionicPidFile.value)
+  // TODO there is probably something in SBT that does exactly that
+  private def copyFiles(in: Seq[File], targetDir: File): Seq[File] = {
+    val out = in map (targetDir / _.name)
+    IO.copy(in zip out)
+    out
   }
 }
