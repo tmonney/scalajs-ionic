@@ -1,5 +1,7 @@
 import scala.language.postfixOps
 
+import scala.util.{Try, Success, Failure}
+
 import sbt._
 import Keys._
 
@@ -13,7 +15,8 @@ object IonicPlugin extends AutoPlugin {
 
   object autoImport {
     val ionicJsFiles = taskKey[Seq[File]]("Gather JS files to process")
-    val ionicStart = taskKey[Unit]("Start serving the Ionic application")
+    val ionicServeArgs = settingKey[Seq[String]]("Arguments passed to ionicServe")
+    val ionicServe = taskKey[Unit]("Serve the Ionic application")
     val ionicStop = taskKey[Unit]("Stop the currently serving Ionic application")
   }
 
@@ -38,27 +41,36 @@ object IonicPlugin extends AutoPlugin {
 
     ionicPidFile := target.value / "ionic.pid",
 
-    ionicStart := {
-      // TODO allow the user to configure flags
-      Process("ionic" :: "serve" :: "--lab" :: "--serverlogs" :: "--consolelogs" :: Nil, baseDirectory.value).run()
+    ionicServeArgs := Seq("--serverlogs", "--consolelogs"),
+
+    ionicServe := {
+      Process("ionic" +: "serve" +: ionicServeArgs.value, baseDirectory.value).run()
       "pgrep node -n" #> ionicPidFile.value !
     },
 
     // make sure the assets are processed before starting the server
-    ionicStart <<= ionicStart.dependsOn(copyJsFiles),
+    ionicServe <<= ionicServe.dependsOn(assets),
 
     ionicStop := {
-      // TODO handle the case when the PID file does not exist
-      val pid = IO.read(ionicPidFile.value)
-      s"kill $pid".!
-      IO.delete(ionicPidFile.value)
+      val result = for {
+        pid <- Try(IO.read(ionicPidFile.value))
+        _ <- Try(s"kill $pid" !)
+        _ <- Try(IO.delete(ionicPidFile.value))
+      } yield pid.trim
+
+      val log = streams.value.log
+
+      result match {
+        case Success(pid) => log.info(s"Stopped Ionic server (pid=$pid)")
+        case Failure(e) => {
+          log.error(s"Could not stop Ionic server") 
+          throw e
+        }
+      }
     }
   )
 
-  // TODO there is probably something in SBT that does exactly that
-  private def copyFiles(in: Seq[File], targetDir: File): Seq[File] = {
-    val out = in map (targetDir / _.name)
-    IO.copy(in zip out)
-    out
+  private def copyFiles(in: Seq[File], targetDir: File) = {
+    IO.copy(in map (f => (f, targetDir / f.name)))
   }
 }
