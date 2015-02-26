@@ -5,7 +5,7 @@ import scala.util.{Try, Success, Failure}
 import sbt._
 import Keys._
 
-import com.typesafe.sbt.web.SbtWeb
+import com.typesafe.sbt.web.{ SbtWeb, PathMapping }
 import com.typesafe.sbt.web.Import._
 import WebKeys._
 
@@ -14,30 +14,40 @@ object IonicPlugin extends AutoPlugin {
   override def requires = SbtWeb
 
   object autoImport {
-    val ionicJsFiles = taskKey[Seq[File]]("Gather JS files to process")
-    val ionicServeArgs = settingKey[Seq[String]]("Arguments passed to ionicServe")
-    val ionicServe = taskKey[Unit]("Serve the Ionic application")
-    val ionicStop = taskKey[Unit]("Stop the currently serving Ionic application")
+    val ionicJsFiles = TaskKey[Seq[File]]("ionic-js", "Entry point for the external Ionic JS files")
+    val ionicServeArgs = SettingKey[Seq[String]]("ionic-serve-args", "Arguments passed to ionicServe")
+    val ionicServe = TaskKey[Unit]("ionic-serve", "Serve the Ionic application")
+    val ionicStop = TaskKey[Unit]("ionic-stop", "Stop the currently serving Ionic application")
   }
 
   import autoImport._
   import com.typesafe.sbt.web.pipeline.Pipeline
 
   val ionicPidFile = settingKey[File]("A file containing the PID of the last Ionic process")
-  val copyJsFiles = taskKey[Pipeline.Stage]("Copy JS files")
+  val jsFilesGenerator = taskKey[Seq[File]]("JS files generator")
+  val jsFilesMapping = taskKey[Pipeline.Stage]("JS files mapping")
 
   override lazy val projectSettings = Seq(
-    copyJsFiles := { mappings =>
-      val targetDir = webTarget.value / "ionic-js"
-      val jsIn = ionicJsFiles.value
-      val jsMapIn = jsIn map (js => file(js.absolutePath + ".map"))
-      val out = copyFiles(jsIn ++ jsMapIn, targetDir)
-      val targets = out map (f => s"js/${f.name}")
-      mappings ++ (out zip targets)
+    jsFilesGenerator := {
+      val sources = ionicJsFiles.value
+      val mappings = sources pair (f => Some(f.name))
+      val copies = mappings map { case (file, path) => file -> (resourceManaged in Assets).value / "js" / path }
+      IO.copy(copies)
+      copies map (_._2)
     },
 
-    pipelineStages in Assets := Seq(copyJsFiles),
-    pipelineStages := Seq(copyJsFiles),
+    jsFilesMapping := { mappings: Seq[PathMapping] => 
+      val (ionicSources, other) = mappings.partition (jsFilesGenerator.value contains _._1)
+      val ionicMappings = ionicSources.map(_._1) pair relativeTo((resourceManaged in Assets).value)
+      println(ionicMappings)
+      other ++ ionicMappings
+    },
+
+    sourceGenerators in Assets <+= jsFilesGenerator,
+
+    pipelineStages in Assets := Seq(jsFilesMapping),
+    pipelineStages := Seq(jsFilesMapping),
+    
 
     ionicPidFile := target.value / "ionic.pid",
 
