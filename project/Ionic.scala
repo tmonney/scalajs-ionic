@@ -18,36 +18,23 @@ object IonicPlugin extends AutoPlugin {
     val ionicServeArgs = SettingKey[Seq[String]]("ionic-serve-args", "Arguments passed to ionicServe")
     val ionicServe = TaskKey[Unit]("ionic-serve", "Serve the Ionic application")
     val ionicStop = TaskKey[Unit]("ionic-stop", "Stop the currently serving Ionic application")
+
+    val Dev = config("Development")
+    val Prod = config("Production")
   }
 
   import autoImport._
   import com.typesafe.sbt.web.pipeline.Pipeline
 
   val ionicPidFile = settingKey[File]("A file containing the PID of the last Ionic process")
-  val jsFilesGenerator = taskKey[Seq[File]]("JS files generator")
   val jsFilesMapping = taskKey[Pipeline.Stage]("JS files mapping")
 
   override lazy val projectSettings = Seq(
-    jsFilesGenerator := {
-      val sources = ionicJsFiles.value
-      val mappings = sources pair (f => Some(f.name))
-      val copies = mappings map { case (file, path) => file -> (resourceManaged in Assets).value / "js" / path }
-      IO.copy(copies)
-      copies map (_._2)
-    },
+    jsFilesMapping in Dev := jsFilesMapping(Dev).value,
+    jsFilesMapping in Prod := jsFilesMapping(Prod).value,
 
-    jsFilesMapping := { mappings: Seq[PathMapping] => 
-      val (ionicSources, other) = mappings.partition (jsFilesGenerator.value contains _._1)
-      val ionicMappings = ionicSources.map(_._1) pair relativeTo((resourceManaged in Assets).value)
-      println(ionicMappings)
-      other ++ ionicMappings
-    },
-
-    sourceGenerators in Assets <+= jsFilesGenerator,
-
-    pipelineStages in Assets := Seq(jsFilesMapping),
-    pipelineStages := Seq(jsFilesMapping),
-    
+    pipelineStages in Assets := Seq(jsFilesMapping in Dev),
+    pipelineStages := Seq(jsFilesMapping in Prod),
 
     ionicPidFile := target.value / "ionic.pid",
 
@@ -80,7 +67,10 @@ object IonicPlugin extends AutoPlugin {
     }
   )
 
-  private def copyFiles(in: Seq[File], targetDir: File) = {
-    IO.copy(in map (f => (f, targetDir / f.name)))
+  private def jsFilesMapping(conf: Configuration) = Def.task { mappings: Seq[PathMapping] => 
+    val ionicSources = (ionicJsFiles in conf).value
+    val js = ionicSources map (f => f -> s"js/${f.name}")
+    val maps = js map { case (f, path) => file(f.absolutePath + ".map") -> s"js/${f.name}.map" }
+    mappings ++ js ++ maps
   }
 }
