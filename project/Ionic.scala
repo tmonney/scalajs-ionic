@@ -27,8 +27,8 @@ object IonicPlugin extends AutoPlugin {
   val jsFilesMapping = taskKey[Pipeline.Stage]("JS files mapping")
 
   override lazy val projectSettings = Seq(
-    jsFilesMapping in Assets := jsMapping((ionicJsFiles in Assets).value),
-    jsFilesMapping := jsMapping(ionicJsFiles.value),
+    jsFilesMapping in Assets := jsMappings((ionicJsFiles in Assets).value),
+    jsFilesMapping := jsMappings(ionicJsFiles.value, (ionicJsFiles in Assets).value),
 
     pipelineStages in Assets := Seq(jsFilesMapping in Assets),
     pipelineStages := Seq(jsFilesMapping),
@@ -64,9 +64,21 @@ object IonicPlugin extends AutoPlugin {
     }
   )
 
-  private def jsMapping(sources: Seq[File]) = { mappings: Seq[PathMapping] =>
-    val js = sources map (f => f -> s"js/${f.name}")
-    val maps = js map { case (f, path) => file(f.absolutePath + ".map") -> s"js/${f.name}.map" }
-    mappings ++ js ++ maps
+  private def jsMappings(sources: Seq[File], exclusions: Seq[File] = Seq.empty) = { mappings: Seq[PathMapping] =>
+    val included = (sources diff exclusions)
+    val js = included map jsFileMapping
+    val maps = included map jsSourceMapMapping
+    (mappings ++ js ++ maps) filterNot { case (file, _) =>
+      val sourceMapExclusions = exclusions.map(jsSourceMapMapping).map(_._1)
+      (exclusions ++ sourceMapExclusions) contains file
+    }
+  }
+
+  private def jsFileMapping(f: File) = {
+    f -> s"js/${f.name}"
+  }
+
+  private def jsSourceMapMapping(f: File) = {
+    file(f.absolutePath + ".map") -> s"js/${f.name}.map"
   }
 }
