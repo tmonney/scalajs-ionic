@@ -16,6 +16,6 @@ lazy val ionic = project.in(file("ionic"))
 		libraryDependencies ++= Seq(
 			"org.webjars" % "ionic" % "1.0.0-beta.14"
 		),
-		ionicJsFiles in Dev := Seq((fastOptJS in Compile in scalajs).value.data),
-		ionicJsFiles in Prod := Seq((fullOptJS in Compile in scalajs).value.data)
+		ionicJsFiles in Assets := Seq((fastOptJS in Compile in scalajs).value.data),
+		ionicJsFiles := Seq((fullOptJS in Compile in scalajs).value.data)
 	)

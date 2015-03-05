@@ -18,9 +18,6 @@ object IonicPlugin extends AutoPlugin {
     val ionicServeArgs = SettingKey[Seq[String]]("ionic-serve-args", "Arguments passed to ionicServe")
     val ionicServe = TaskKey[Unit]("ionic-serve", "Serve the Ionic application")
     val ionicStop = TaskKey[Unit]("ionic-stop", "Stop the currently serving Ionic application")
-
-    val Dev = config("Development")
-    val Prod = config("Production")
   }
 
   import autoImport._
@@ -30,11 +27,11 @@ object IonicPlugin extends AutoPlugin {
   val jsFilesMapping = taskKey[Pipeline.Stage]("JS files mapping")
 
   override lazy val projectSettings = Seq(
-    jsFilesMapping in Dev := jsFilesMapping(Dev).value,
-    jsFilesMapping in Prod := jsFilesMapping(Prod).value,
+    jsFilesMapping in Assets := jsMapping((ionicJsFiles in Assets).value),
+    jsFilesMapping := jsMapping(ionicJsFiles.value),
 
-    pipelineStages in Assets := Seq(jsFilesMapping in Dev),
-    pipelineStages := Seq(jsFilesMapping in Prod),
+    pipelineStages in Assets := Seq(jsFilesMapping in Assets),
+    pipelineStages := Seq(jsFilesMapping),
 
     ionicPidFile := target.value / "ionic.pid",
 
@@ -67,9 +64,8 @@ object IonicPlugin extends AutoPlugin {
     }
   )
 
-  private def jsFilesMapping(conf: Configuration) = Def.task { mappings: Seq[PathMapping] => 
-    val ionicSources = (ionicJsFiles in conf).value
-    val js = ionicSources map (f => f -> s"js/${f.name}")
+  private def jsMapping(sources: Seq[File]) = { mappings: Seq[PathMapping] =>
+    val js = sources map (f => f -> s"js/${f.name}")
     val maps = js map { case (f, path) => file(f.absolutePath + ".map") -> s"js/${f.name}.map" }
     mappings ++ js ++ maps
   }
