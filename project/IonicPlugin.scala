@@ -65,7 +65,7 @@ object IonicPlugin extends AutoPlugin {
   )
 
   private def jsMappings(sources: Seq[File], exclusions: Seq[File] = Seq.empty) = { mappings: Seq[PathMapping] =>
-    val included = (sources diff exclusions)
+    val included = sources diff exclusions
     val js = included map jsFileMapping
     val maps = included map jsSourceMapMapping
     (mappings ++ js ++ maps) filterNot { case (file, _) =>
