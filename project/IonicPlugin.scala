@@ -68,10 +68,11 @@ object IonicPlugin extends AutoPlugin {
     val included = sources diff exclusions
     val js = included map jsFileMapping
     val maps = included map jsSourceMapMapping
-    (mappings ++ js ++ maps) filterNot { case (file, _) =>
-      val sourceMapExclusions = exclusions.map(jsSourceMapMapping).map(_._1)
-      (exclusions ++ sourceMapExclusions) contains file
-    }
+    (mappings ++ js ++ maps)
+      .filterNot { case (file, _) =>
+        val sourceMapExclusions = exclusions.map(jsSourceMapMapping).map(_._1)
+        (exclusions ++ sourceMapExclusions) contains file }
+      .filter { case (file, _) => file.exists }
   }
 
   private def jsFileMapping(f: File) = {
