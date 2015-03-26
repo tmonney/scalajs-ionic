@@ -1,9 +1,9 @@
 package ionic
 
-import scala.scalajs.js
-
 import com.greencatsoft.angularjs.core.Promise
 import com.greencatsoft.angularjs.injectable
+
+import scala.scalajs.js
 
 @injectable("$ionicPlatform")
 trait IonicPlatform extends js.Object {
